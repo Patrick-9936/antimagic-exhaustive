@@ -6,12 +6,13 @@
 #include <string.h>
 
 static int n, m;
-static int eu[32], ev[32];
-static uint32_t incBits[8];
-static int ord[32];
-static int ssum[8];
-static uint32_t used;
+static int eu[64], ev[64];
+static uint64_t incBits[16];
+static int ord[64];
+static int ssum[16];
+static uint64_t used;
 static long long nodes, budget = 4000000LL;
+static long long worst_nodes = 0; static long long worst_mask = -1;
 static int aborted;
 
 static int all_distinct(void){
@@ -23,16 +24,16 @@ static int rec(int j){
   if (j==m) return all_distinct();
   if (++nodes > budget){ aborted=1; return 0; }
   int e = ord[j], u = eu[e], v = ev[e];
-  uint32_t rem = (j+1 >= 32) ? 0u : ~((1u<<(j+1))-1u);
+  uint64_t rem = (j+1 >= 64) ? 0ULL : ~((1ULL<<(j+1))-1ULL);
   for (int L=1; L<=m; L++){
-    uint32_t bit = 1u<<(L-1);
+    uint64_t bit = 1ULL<<(L-1);
     if (used & bit) continue;
     used |= bit; ssum[u]+=L; ssum[v]+=L;
     int ok = 1;
     for (int a=0;a<n && ok;a++)
       for (int b=a+1;b<n;b++)
         if (ssum[a]==ssum[b]){
-          uint32_t ra = incBits[a]&rem, rb = incBits[b]&rem;
+          uint64_t ra = incBits[a]&rem, rb = incBits[b]&rem;
           if ((ra & ~rb)==0 && (rb & ~ra)==0){ ok=0; break; }
         }
     if (ok && rec(j+1)) { used &= ~bit; ssum[u]-=L; ssum[v]-=L; return 1; }
@@ -46,17 +47,17 @@ static long long cnt_rec(int j){
   if (j==m) return all_distinct() ? 1 : 0;
   if (++nodes > budget){ aborted=1; return 0; }
   int e = ord[j], u = eu[e], v = ev[e];
-  uint32_t rem = (j+1 >= 32) ? 0u : ~((1u<<(j+1))-1u);
+  uint64_t rem = (j+1 >= 64) ? 0ULL : ~((1ULL<<(j+1))-1ULL);
   long long total = 0;
   for (int L=1; L<=m; L++){
-    uint32_t bit = 1u<<(L-1);
+    uint64_t bit = 1ULL<<(L-1);
     if (used & bit) continue;
     used |= bit; ssum[u]+=L; ssum[v]+=L;
     int ok = 1;
     for (int a=0;a<n && ok;a++)
       for (int b=a+1;b<n;b++)
         if (ssum[a]==ssum[b]){
-          uint32_t ra = incBits[a]&rem, rb = incBits[b]&rem;
+          uint64_t ra = incBits[a]&rem, rb = incBits[b]&rem;
           if ((ra & ~rb)==0 && (rb & ~ra)==0){ ok=0; break; }
         }
     if (ok) total += cnt_rec(j+1);
@@ -70,7 +71,7 @@ int main(int argc, char**argv){
   if (argc < 4){ fprintf(stderr,"usage: %s n shard nshards [count]\n", argv[0]); return 1; }
   n = atoi(argv[1]); int shard = atoi(argv[2]), nsh = atoi(argv[3]);
   int docount = (argc > 4 && argv[4][0]=='c');
-  if (n < 1 || n > 8){ fprintf(stderr,"n must be 1..8\n"); return 1; }
+  if (n < 1 || n > 9){ fprintf(stderr,"n must be 1..8\n"); return 1; }
 
   int ne = 0;
   for (int u=0;u<n;u++) for (int v=u+1;v<n;v++){ eu[ne]=u; ev[ne]=v; ne++; }
@@ -78,7 +79,7 @@ int main(int argc, char**argv){
   long long total = 1LL<<m;
 
   long long conn=0, anti=0, undec=0, labelings=0;
-  for (int u=0;u<n;u++){ incBits[u]=0; }
+  for (int u=0;u<16;u++){ incBits[u]=0; }
   long long block = (total + nsh - 1) / nsh;
   long long lo = (long long)shard * block;
   long long hi = lo + block; if (hi > total) hi = total;
@@ -96,11 +97,11 @@ int main(int argc, char**argv){
     conn++;
 
     // build edge order
-    int deg[8]; memset(deg,0,sizeof deg);
-    int elist[32], cnt=0;
+    int deg[16]; memset(deg,0,sizeof deg);
+    int elist[64], cnt=0;
     for (int e=0;e<m;e++) if (mask>>e & 1LL){ elist[cnt++]=e; deg[eu[e]]++; deg[ev[e]]++; }
     // greedy: densest edge first, then edges sharing a vertex with placed ones
-    int placed = 0; int avail[32]; memcpy(avail, elist, sizeof(int)*cnt);
+    int placed = 0; int avail[64]; memcpy(avail, elist, sizeof(int)*cnt);
     while (placed < cnt){
       int best=-1, bestScore=-1;
       for (int i=0;i<cnt;i++){
@@ -114,16 +115,17 @@ int main(int argc, char**argv){
       ord[placed++] = best;
     }
     for (int u=0;u<n;u++) incBits[u]=0;
-    for (int j=0;j<cnt;j++){ incBits[eu[ord[j]]] |= 1u<<j; incBits[ev[ord[j]]] |= 1u<<j; }
+    for (int j=0;j<cnt;j++){ incBits[eu[ord[j]]] |= 1ULL<<j; incBits[ev[ord[j]]] |= 1ULL<<j; }
 
     memset(ssum,0,sizeof ssum); used=0; nodes=0; aborted=0;
     int r;
     if (docount){ long long c = cnt_rec(0); labelings += c; r = (c>0); }
     else r = rec(0);
+    if (nodes > worst_nodes){ worst_nodes = nodes; worst_mask = mask; }
     if (aborted) undec++;
     else if (r) anti++;
   }
-  printf("n=%d shard=%d/%d connected=%lld antimagic=%lld undecided=%lld labelings=%lld\n",
-         n, shard, nsh, conn, anti, undec, labelings);
+  printf("n=%d shard=%d/%d connected=%lld antimagic=%lld undecided=%lld labelings=%lld worst_nodes=%lld worst_mask=%lld\n",
+         n, shard, nsh, conn, anti, undec, labelings, worst_nodes, worst_mask);
   return 0;
 }
