@@ -47,6 +47,28 @@ linear in the number of graphs, and the real bound is the `2^C(n,2)` enumeration
 `n = 9` needs 2^36 graphs (~83 CPU-hours), `n = 10` is out of reach
 (2^45 graphs).
 
+
+## Isomorphism-invariant verification (nauty `geng`)
+
+Because antimagicness is invariant under isomorphism, one representative per
+isomorphism class suffices. Using `geng -c n` from nauty 2.8.9:
+
+| n | connected graphs up to iso | counterexamples | undecided | worst-case nodes | time |
+|---|---------------------------:|----------------:|----------:|-----------------:|-----:|
+| 6 | 112 | 0 | 0 | 40 | <1 s |
+| 7 | 853 | 0 | 0 | 100 | <1 s |
+| 8 | 11 117 | 0 | 0 | — | <1 s |
+| 9 | 261 080 | 0 | 0 | 1 964 | 2 s |
+| 10 | 11 716 571 | 0 | 0 | 13 708 | 128 s |
+
+The counts reproduce OEIS A001349 exactly (112, 853, 11117, 261080, 11716571).
+
+**Theorem.** Every connected graph on at most 10 vertices other than K2 admits an
+antimagic labeling.
+
+n = 11 (1 018 997 864 connected graphs) is running as 256 `geng` residue-class
+shards in `.github/workflows/n11.yml`.
+
 ## Reproduce
 
 ```
@@ -54,4 +76,5 @@ cc -O2 -o antimagic antimagic.c
 ./antimagic 7 0 1          # all 7-vertex graphs
 ./antimagic 8 17 256       # shard 17 of 256
 ./antimagic 4 0 1 count    # also count antimagic labelings (20 for n=3)
+./nauty2_8_9/geng -c 10 | ./g6decide   # isomorphism-invariant check, n=10
 ```
